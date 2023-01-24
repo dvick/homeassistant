@@ -1,0 +1,87 @@
+blueprint:
+  name: Camera snapshot notification via binary sensor
+  description: Send notification with camera snapshot when binary sensor switches on
+  domain: automation
+  input:
+    binary_sensor:
+      name: Binary sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    camera:
+      name: Camera
+      selector:
+        entity:
+          domain: camera
+    android_devices:
+      name: Android devices to notify
+      selector:
+        device:
+          integration: mobile_app
+          entity:
+            device_class: plug
+          multiple: true
+      default: []
+    ios_devices:
+      name: iOS devices to notify
+      selector:
+        device:
+          integration: mobile_app
+          manufacturer: Apple
+          multiple: true
+      default: []
+    notification_title:
+      name: Notification title
+      default: ''
+    notification_message:
+      name: Notifcation message
+      default: Doorbell button pushed
+    click_url:
+      name: Click URL
+      default: ''
+    cooldown:
+      name: Cooldown
+      description: Time to wait before triggering again
+      selector:
+        duration:
+      default:
+        seconds: 30
+variables:
+  camera: !input camera
+  snapshot_file: /media/snapshots/{{ states[camera].object_id }}.jpg
+  snapshot_url: "{{ snapshot_file | replace('/media/', '/media/local/') }}"
+  cooldown: !input cooldown
+trigger:
+  - platform: state
+    entity_id: !input binary_sensor
+    from: 'off'
+    to: 'on'
+condition: >-
+  {{ now() - (state_attr(this.entity_id, 'last_triggered') | default(as_datetime(0), true)) > timedelta(**cooldown) }}
+action:
+  - service: camera.snapshot
+    target:
+      entity_id: !input camera
+    data:
+      filename: '{{ snapshot_file }}'
+  - repeat:
+      for_each: !input android_devices
+      sequence:
+        - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+          data:
+            message: !input notification_message
+            title: !input notification_title
+            data:
+              image: '{{ snapshot_url }}'
+              clickAction: !input click_url
+  - repeat:
+      for_each: !input ios_devices
+      sequence:
+        - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+          data:
+            message: !input notification_message
+            title: !input notification_title
+            data:
+              image: '{{ snapshot_url }}'
+              entity_id: !input camera
+              url: !input click_url
