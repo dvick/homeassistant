@@ -53,7 +53,7 @@ variables:
 trigger:
   - !input trigger
 condition: >-
-  {{ now() - (state_attr(this.entity_id, 'last_triggered') | default(as_datetime(0), true)) > timedelta(**cooldown) }}
+  {{ this.attributes.last_triggered is none or now() - this.attributes.last_triggered > timedelta(**cooldown) }}
 action:
   - service: camera.snapshot
     target:
